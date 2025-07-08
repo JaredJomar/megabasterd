@@ -576,6 +576,7 @@ public final class MainPanelView extends javax.swing.JFrame {
         down_remtime_label = new javax.swing.JLabel();
         jButton1 = new javax.swing.JButton();
         force_chunk_reset_button = new javax.swing.JButton();
+        skip_proxy_button = new javax.swing.JButton();
         download_status_bar = new javax.swing.JProgressBar();
         uploads_panel = new javax.swing.JPanel();
         global_speed_up_label = new javax.swing.JLabel();
@@ -688,6 +689,17 @@ public final class MainPanelView extends javax.swing.JFrame {
             }
         });
 
+        skip_proxy_button.setBackground(new java.awt.Color(255, 102, 0));
+        skip_proxy_button.setFont(new java.awt.Font("Dialog", 1, 18)); // NOI18N
+        skip_proxy_button.setForeground(new java.awt.Color(255, 255, 255));
+        skip_proxy_button.setText("SKIP PROXY");
+        skip_proxy_button.setDoubleBuffered(true);
+        skip_proxy_button.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                skip_proxy_buttonActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout downloads_panelLayout = new javax.swing.GroupLayout(downloads_panel);
         downloads_panel.setLayout(downloads_panelLayout);
         downloads_panelLayout.setHorizontalGroup(
@@ -696,6 +708,8 @@ public final class MainPanelView extends javax.swing.JFrame {
                 .addComponent(global_speed_down_label, javax.swing.GroupLayout.DEFAULT_SIZE, 474, Short.MAX_VALUE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(force_chunk_reset_button)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(skip_proxy_button)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(pause_all_down_button))
             .addGroup(downloads_panelLayout.createSequentialGroup()
@@ -728,6 +742,7 @@ public final class MainPanelView extends javax.swing.JFrame {
                 .addGroup(downloads_panelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(global_speed_down_label)
                     .addComponent(pause_all_down_button)
+                    .addComponent(skip_proxy_button)
                     .addComponent(force_chunk_reset_button)))
         );
 
@@ -1593,6 +1608,81 @@ public final class MainPanelView extends javax.swing.JFrame {
 
     }//GEN-LAST:event_force_chunk_reset_buttonActionPerformed
 
+    private void skip_proxy_buttonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_skip_proxy_buttonActionPerformed
+        // Skip only the currently used proxies and force workers to get new ones
+        
+        skip_proxy_button.setEnabled(false);
+        
+        // Get the smart proxy manager
+        SmartMegaProxyManager proxy_manager = _main_panel.getProxy_manager();
+        if (proxy_manager != null) {
+            
+            // Get all currently used proxies from active downloads
+            java.util.Set<String> currently_used_proxies = new java.util.HashSet<>();
+            
+            // Check all active downloads
+            for (Object download_obj : _main_panel.getDownload_manager().getTransference_running_list()) {
+                if (download_obj instanceof Download) {
+                    Download download = (Download) download_obj;
+                    
+                    // Get proxies from all chunk workers in this download
+                    synchronized (download.getWorkers_lock()) {
+                        for (ChunkDownloader worker : download.getChunkworkers()) {
+                            String current_proxy = worker.getCurrent_smart_proxy();
+                            if (current_proxy != null && !current_proxy.isEmpty()) {
+                                currently_used_proxies.add(current_proxy);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            int skipped_count = 0;
+            
+            // Only block the proxies that are currently being used
+            if (!currently_used_proxies.isEmpty()) {
+                for (String proxy : currently_used_proxies) {
+                    proxy_manager.blockProxy(proxy, "USER_SKIP_CURRENT");
+                    skipped_count++;
+                }
+                
+                LOG.log(Level.INFO, "Skip Proxy: Blocked {0} currently used proxies", skipped_count);
+                
+                // Force all downloads to reset their chunks and get new proxies
+                _main_panel.getDownload_manager().forceResetAllChunks();
+            }
+            
+            // Try to get fresh proxies if needed
+            SmartMegaProxyManager.ProxyRefreshResult result = proxy_manager.getFreshProxiesFromProxifly("Manual Skip");
+            
+            if (result.isSuccess() && result.getProxiesAdded() > 0) {
+                javax.swing.JOptionPane.showMessageDialog(this, 
+                    "Skipped " + skipped_count + " current proxies and loaded " + result.getProxiesAdded() + " fresh proxies!");
+            } else if (skipped_count > 0) {
+                String message = "Skipped " + skipped_count + " current proxies.";
+                if (result.getErrorMessage() != null) {
+                    if (result.getErrorMessage().equals("Proxifly is disabled")) {
+                        message += " Enable Proxifly in settings for fresh proxies.";
+                    } else {
+                        message += " " + result.getErrorMessage();
+                    }
+                } else {
+                    message += " No fresh proxies available from Proxifly.";
+                }
+                javax.swing.JOptionPane.showMessageDialog(this, message);
+            } else {
+                javax.swing.JOptionPane.showMessageDialog(this, 
+                    "No proxies currently in use to skip.");
+            }
+        }
+        
+        // Re-enable the button after a short delay
+        javax.swing.Timer timer = new javax.swing.Timer(3000, e -> skip_proxy_button.setEnabled(true));
+        timer.setRepeats(false);
+        timer.start();
+        
+    }//GEN-LAST:event_skip_proxy_buttonActionPerformed
+
     private void copy_all_uploadsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_copy_all_uploadsActionPerformed
         // TODO add your handling code here:
         int total = _main_panel.getUpload_manager().copyAllLinksToClipboard();
@@ -1617,6 +1707,7 @@ public final class MainPanelView extends javax.swing.JFrame {
     private javax.swing.JMenuItem exit_menu;
     private javax.swing.JMenu file_menu;
     private javax.swing.JButton force_chunk_reset_button;
+    private javax.swing.JButton skip_proxy_button;
     private javax.swing.JLabel global_speed_down_label;
     private javax.swing.JLabel global_speed_up_label;
     private javax.swing.JMenu help_menu;
