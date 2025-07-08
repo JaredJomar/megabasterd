@@ -179,6 +179,17 @@ public final class SmartMegaProxyManager {
         return _proxy_list.size();
     }
 
+    public synchronized Set<String> getProxyList() {
+        return _proxy_list.keySet();
+    }
+
+    public synchronized void addProxy(String proxy) {
+        if (proxy != null && !proxy.isEmpty()) {
+            // Add proxy with default values: not banned (-1), http type (-1)
+            _proxy_list.put(proxy, new Long[]{-1L, -1L});
+        }
+    }
+
     public synchronized String[] getProxy(ArrayList<String> excluded) {
 
         if (_proxy_list.size() > 0) {
@@ -203,6 +214,12 @@ public final class SmartMegaProxyManager {
         }
 
         LOG.log(Level.WARNING, "{0} Smart Proxy Manager: NO PROXYS AVAILABLE!! (Refreshing in " + String.valueOf(PROXY_AUTO_REFRESH_SLEEP_TIME) + " secs...)", new Object[]{Thread.currentThread().getName()});
+
+        // Try to get fresh proxies from Proxifly before sleeping
+        if (tryGetProxiesFromProxifly()) {
+            // If we got fresh proxies, try again immediately
+            return getProxyCount() > 0 ? getProxy(excluded) : null;
+        }
 
         try {
             Thread.sleep(PROXY_AUTO_REFRESH_SLEEP_TIME * 1000);
@@ -406,6 +423,91 @@ public final class SmartMegaProxyManager {
 
         _last_refresh_timestamp = System.currentTimeMillis();
 
+    }
+
+    /**
+     * Attempts to get fresh proxies from Proxifly when no proxies are available
+     * @return true if fresh proxies were obtained and added, false otherwise
+     */
+    private synchronized boolean tryGetProxiesFromProxifly() {
+        ProxyRefreshResult result = getFreshProxiesFromProxifly(null);
+        return result.isSuccess();
+    }
+
+    /**
+     * Unified method to get fresh proxies from Proxifly and add them to the proxy manager.
+     * This method consolidates the duplicate functionality across different parts of the application.
+     * 
+     * @param context Optional context string for logging purposes (e.g., "Download: filename", "Manual Skip", etc.)
+     * @return ProxyRefreshResult containing success status, count of added proxies, and any error message
+     */
+    public synchronized ProxyRefreshResult getFreshProxiesFromProxifly(String context) {
+        try {
+            DynamicProxyProvider provider = new DynamicProxyProvider();
+            
+            if (!provider.isEnabled()) {
+                return new ProxyRefreshResult(false, 0, "Proxifly is disabled");
+            }
+            
+            if (!provider.canMakeRequest()) {
+                return new ProxyRefreshResult(false, 0, "Rate limit active");
+            }
+            
+            String logContext = context != null ? context : "Smart Proxy Manager";
+            LOG.log(Level.INFO, "{0} {1}: Attempting to get fresh proxies from Proxifly", new Object[]{Thread.currentThread().getName(), logContext});
+            
+            java.util.List<String> fresh_proxies = provider.getFreshProxies();
+            
+            if (!fresh_proxies.isEmpty()) {
+                // Add fresh proxies to the proxy manager
+                for (String proxy : fresh_proxies) {
+                    addProxy(proxy);
+                }
+                
+                LOG.log(Level.INFO, "{0} {1}: Added {2} fresh proxies from Proxifly", new Object[]{Thread.currentThread().getName(), logContext, fresh_proxies.size()});
+                
+                // Update the UI status
+                _main_panel.getView().updateSmartProxyStatus("SmartProxy: ON (" + String.valueOf(getProxyCount()) + ")" + (this.isForce_smart_proxy() ? " F!" : ""));
+                
+                return new ProxyRefreshResult(true, fresh_proxies.size(), null);
+            } else {
+                LOG.log(Level.INFO, "{0} {1}: No fresh proxies available from Proxifly", new Object[]{Thread.currentThread().getName(), logContext});
+                return new ProxyRefreshResult(false, 0, "No fresh proxies available");
+            }
+            
+        } catch (Exception ex) {
+            String errorMsg = "Error getting fresh proxies from Proxifly: " + ex.getMessage();
+            String logContext = context != null ? context : "Smart Proxy Manager";
+            LOG.log(Level.SEVERE, "{0} {1}: {2}", new Object[]{Thread.currentThread().getName(), logContext, errorMsg});
+            return new ProxyRefreshResult(false, 0, errorMsg);
+        }
+    }
+
+    /**
+     * Result class for proxy refresh operations
+     */
+    public static class ProxyRefreshResult {
+        private final boolean success;
+        private final int proxiesAdded;
+        private final String errorMessage;
+
+        public ProxyRefreshResult(boolean success, int proxiesAdded, String errorMessage) {
+            this.success = success;
+            this.proxiesAdded = proxiesAdded;
+            this.errorMessage = errorMessage;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public int getProxiesAdded() {
+            return proxiesAdded;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
     }
 
     public static class SmartProxyAuthenticator extends Authenticator {
