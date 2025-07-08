@@ -646,6 +646,28 @@ public class SettingsDialog extends javax.swing.JDialog {
 
             force_smart_proxy_checkbox.setSelected(force_smart_proxy);
 
+            // Load Proxifly settings
+            String proxifly_enabled = DBTools.selectSettingValue("proxifly_enabled");
+            boolean proxifly_enable = proxifly_enabled != null && proxifly_enabled.equals("yes");
+            proxifly_enable_checkbox.setSelected(proxifly_enable);
+            proxifly_enable_checkbox.setEnabled(smart_proxy_checkbox.isSelected());
+
+            String proxifly_interval = DBTools.selectSettingValue("proxifly_min_interval");
+            if (proxifly_interval != null) {
+                try {
+                    int interval_minutes = Integer.parseInt(proxifly_interval) / 60; // Convert seconds to minutes
+                    proxifly_interval_spinner.setValue(interval_minutes);
+                } catch (NumberFormatException e) {
+                    proxifly_interval_spinner.setValue(5); // Default to 5 minutes
+                }
+            }
+
+            // Enable/disable Proxifly controls based on checkbox state
+            boolean proxifly_controls_enabled = smart_proxy_checkbox.isSelected() && proxifly_enable;
+            proxifly_interval_label.setEnabled(proxifly_controls_enabled);
+            proxifly_interval_spinner.setEnabled(proxifly_controls_enabled);
+            proxifly_interval_unit_label.setEnabled(proxifly_controls_enabled);
+
             boolean run_command = false;
 
             String run_command_string = DBTools.selectSettingValue("run_command");
@@ -828,6 +850,10 @@ public class SettingsDialog extends javax.swing.JDialog {
         proxy_reset_slot_checkbox = new javax.swing.JCheckBox();
         jLabel10 = new javax.swing.JLabel();
         jLabel11 = new javax.swing.JLabel();
+        proxifly_enable_checkbox = new javax.swing.JCheckBox();
+        proxifly_interval_label = new javax.swing.JLabel();
+        proxifly_interval_spinner = new javax.swing.JSpinner();
+        proxifly_interval_unit_label = new javax.swing.JLabel();
         uploads_scrollpane = new javax.swing.JScrollPane();
         uploads_panel = new javax.swing.JPanel();
         default_slots_up_label = new javax.swing.JLabel();
@@ -1125,6 +1151,27 @@ public class SettingsDialog extends javax.swing.JDialog {
         jLabel11.setFont(new java.awt.Font("Noto Sans", 2, 16)); // NOI18N
         jLabel11.setText("(If you have a list of proxies sorted from best to worst, check sequential)");
 
+        proxifly_enable_checkbox.setFont(new java.awt.Font("Noto Sans", 1, 16)); // NOI18N
+        proxifly_enable_checkbox.setText("Enable Proxifly API (dynamic proxy provider)");
+        proxifly_enable_checkbox.setEnabled(false);
+        proxifly_enable_checkbox.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                proxifly_enable_checkboxActionPerformed(evt);
+            }
+        });
+
+        proxifly_interval_label.setFont(new java.awt.Font("Noto Sans", 0, 16)); // NOI18N
+        proxifly_interval_label.setText("Min request interval:");
+        proxifly_interval_label.setEnabled(false);
+
+        proxifly_interval_spinner.setFont(new java.awt.Font("Noto Sans", 0, 16)); // NOI18N
+        proxifly_interval_spinner.setModel(new javax.swing.SpinnerNumberModel(5, 1, 60, 1));
+        proxifly_interval_spinner.setEnabled(false);
+
+        proxifly_interval_unit_label.setFont(new java.awt.Font("Noto Sans", 0, 16)); // NOI18N
+        proxifly_interval_unit_label.setText("minutes");
+        proxifly_interval_unit_label.setEnabled(false);
+
         javax.swing.GroupLayout smart_proxy_settingsLayout = new javax.swing.GroupLayout(smart_proxy_settings);
         smart_proxy_settings.setLayout(smart_proxy_settingsLayout);
         smart_proxy_settingsLayout.setHorizontalGroup(
@@ -1168,7 +1215,18 @@ public class SettingsDialog extends javax.swing.JDialog {
                     .addGroup(smart_proxy_settingsLayout.createSequentialGroup()
                         .addComponent(proxy_reset_slot_checkbox)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jLabel10)))
+                        .addComponent(jLabel10))
+                    .addGroup(smart_proxy_settingsLayout.createSequentialGroup()
+                        .addComponent(proxifly_enable_checkbox))
+                    .addGroup(smart_proxy_settingsLayout.createSequentialGroup()
+                        .addContainerGap()
+                        .addGroup(smart_proxy_settingsLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(smart_proxy_settingsLayout.createSequentialGroup()
+                                .addComponent(proxifly_interval_label)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(proxifly_interval_spinner, javax.swing.GroupLayout.PREFERRED_SIZE, 80, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(proxifly_interval_unit_label)))))
                 .addGap(0, 0, Short.MAX_VALUE))
         );
         smart_proxy_settingsLayout.setVerticalGroup(
@@ -1202,6 +1260,14 @@ public class SettingsDialog extends javax.swing.JDialog {
                 .addGroup(smart_proxy_settingsLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(proxy_reset_slot_checkbox)
                     .addComponent(jLabel10))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(smart_proxy_settingsLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(proxifly_enable_checkbox))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(smart_proxy_settingsLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(proxifly_interval_label)
+                    .addComponent(proxifly_interval_spinner, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(proxifly_interval_unit_label))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(smart_proxy_settingsLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(force_smart_proxy_checkbox)
@@ -2128,12 +2194,19 @@ public class SettingsDialog extends javax.swing.JDialog {
             settings.put("smartproxy_ban_time", String.valueOf(bad_proxy_time_spinner.getValue()));
             settings.put("smartproxy_timeout", String.valueOf(proxy_timeout_spinner.getValue()));
             settings.put("smartproxy_autorefresh_time", String.valueOf(auto_refresh_proxy_time_spinner.getValue()));
+            
+            // Save Proxifly settings
+            settings.put("proxifly_enabled", proxifly_enable_checkbox.isSelected() ? "yes" : "no");
+            settings.put("proxifly_min_interval", String.valueOf((Integer) proxifly_interval_spinner.getValue() * 60)); // Convert minutes to seconds
 
             if (upload_log_checkbox.isSelected()) {
                 createUploadLogDir();
             }
 
-            if (custom_proxy_textarea.getText().trim().length() == 0) {
+            // If Proxifly is enabled, SmartProxy must be enabled
+            if (proxifly_enable_checkbox.isSelected()) {
+                smart_proxy_checkbox.setSelected(true);
+            } else if (custom_proxy_textarea.getText().trim().length() == 0) {
                 smart_proxy_checkbox.setSelected(false);
             }
 
@@ -3331,6 +3404,23 @@ public class SettingsDialog extends javax.swing.JDialog {
     private void smart_proxy_checkboxStateChanged(javax.swing.event.ChangeEvent evt) {//GEN-FIRST:event_smart_proxy_checkboxStateChanged
 
         MiscTools.containerSetEnabled(smart_proxy_settings, smart_proxy_checkbox.isSelected());
+        
+        // Enable/disable Proxifly checkbox based on smart proxy checkbox
+        proxifly_enable_checkbox.setEnabled(smart_proxy_checkbox.isSelected());
+        if (!smart_proxy_checkbox.isSelected()) {
+            proxifly_enable_checkbox.setSelected(false);
+            // Disable all Proxifly controls
+            proxifly_interval_label.setEnabled(false);
+            proxifly_interval_spinner.setEnabled(false);
+            proxifly_interval_unit_label.setEnabled(false);
+        } else {
+            // Enable Proxifly controls if Proxifly is enabled
+            boolean proxifly_enabled = proxifly_enable_checkbox.isSelected();
+            proxifly_interval_label.setEnabled(proxifly_enabled);
+            proxifly_interval_spinner.setEnabled(proxifly_enabled);
+            proxifly_interval_unit_label.setEnabled(proxifly_enabled);
+        }
+        
         revalidate();
         repaint();
 
@@ -3430,6 +3520,22 @@ public class SettingsDialog extends javax.swing.JDialog {
 
     }//GEN-LAST:event_proxy_random_radioActionPerformed
 
+    private void proxifly_enable_checkboxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_proxifly_enable_checkboxActionPerformed
+        // Enable/disable Proxifly related controls
+        boolean enabled = proxifly_enable_checkbox.isSelected();
+        
+        // If Proxifly is enabled, SmartProxy must be enabled too
+        if (enabled && !smart_proxy_checkbox.isSelected()) {
+            smart_proxy_checkbox.setSelected(true);
+            // Trigger smart proxy state change to enable the smart proxy panel
+            MiscTools.containerSetEnabled(smart_proxy_settings, true);
+        }
+        
+        proxifly_interval_label.setEnabled(enabled);
+        proxifly_interval_spinner.setEnabled(enabled);
+        proxifly_interval_unit_label.setEnabled(enabled);
+    }//GEN-LAST:event_proxifly_enable_checkboxActionPerformed
+
     private void proxy_sequential_radioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_proxy_sequential_radioActionPerformed
         // TODO add your handling code here:
         proxy_sequential_radio.setSelected(true);
@@ -3526,6 +3632,10 @@ public class SettingsDialog extends javax.swing.JDialog {
     private javax.swing.JLabel proxy_user_label;
     private javax.swing.JTextField proxy_user_textfield;
     private javax.swing.JLabel proxy_warning_label;
+    private javax.swing.JCheckBox proxifly_enable_checkbox;
+    private javax.swing.JSpinner proxifly_interval_spinner;
+    private javax.swing.JLabel proxifly_interval_label;
+    private javax.swing.JLabel proxifly_interval_unit_label;
     private javax.swing.JScrollPane public_folder_panel;
     private javax.swing.JTextArea public_folder_warning;
     private javax.swing.JLabel rec_download_slots_label;
