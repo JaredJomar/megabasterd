@@ -112,6 +112,7 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
     private final Object _progress_watchdog_lock;
     private final boolean _priority;
     private volatile boolean global_cancel = false;
+    private volatile ProxyProgressMonitor _proxy_progress_monitor;
 
     public void setGlobal_cancel(boolean global_cancel) {
         this.global_cancel = global_cancel;
@@ -166,6 +167,7 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
         _progress_meter = new ProgressMeter(this);
         _custom_chunks_dir = custom_chunks_dir;
         _turbo = false;
+        _proxy_progress_monitor = new ProxyProgressMonitor(this);
     }
 
     public Download(Download download) {
@@ -212,6 +214,7 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
         _progress_meter = new ProgressMeter(this);
         _custom_chunks_dir = download.getCustom_chunks_dir();
         _turbo = false;
+        _proxy_progress_monitor = new ProxyProgressMonitor(this);
 
     }
 
@@ -650,6 +653,11 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
 
                         _thread_pool.execute(getProgress_meter());
 
+                        // Start proxy progress monitor for automatic proxy switching on stagnant downloads
+                        if (MainPanel.isUse_smart_proxy()) {
+                            _thread_pool.execute(_proxy_progress_monitor);
+                        }
+
                         getMain_panel().getGlobal_dl_speed().attachTransference(this);
 
                         synchronized (_workers_lock) {
@@ -739,6 +747,11 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
                         LOG.log(Level.INFO, "{0} Chunkdownloaders finished!", Thread.currentThread().getName());
 
                         getProgress_meter().setExit(true);
+
+                        // Stop proxy progress monitor
+                        if (_proxy_progress_monitor != null) {
+                            _proxy_progress_monitor.setExit(true);
+                        }
 
                         getProgress_meter().secureNotify();
 
@@ -1437,6 +1450,11 @@ public class Download implements Transference, Runnable, SecureSingleThreadNotif
         if (!_exit) {
 
             _exit = true;
+
+            // Stop proxy progress monitor
+            if (_proxy_progress_monitor != null) {
+                _proxy_progress_monitor.setExit(true);
+            }
 
             if (isRetrying_request()) {
 
