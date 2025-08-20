@@ -1,4 +1,3 @@
-
 #---------------------------------------#
 # Project Ignores                       #
 #---------------------------------------#
@@ -128,3 +127,6 @@ $RECYCLE.BIN/
 
 #MegaBasterd DB
 *.db
+
+# Ignore JJJ/doc.md
+JJJ/doc.md
